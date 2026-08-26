@@ -24,7 +24,7 @@ function App() {
       <main className="main-content">
         {!isAuthPage && <Header />}
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route index element={<Dashboard />} />
           <Route path="/medical-records" element={<MedicalRecords />} />
           <Route path="/medicines" element={<Medicines />} />
           <Route path="/appointments" element={<Appointments />} />
