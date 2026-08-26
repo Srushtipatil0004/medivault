@@ -348,6 +348,26 @@ body{font-family:'Inter',sans-serif;background:#eef4fa;color:#172b4d}
 @media(max-width:768px){
   .form-row{grid-template-columns:1fr}
 }
+
+/* Auth Pages */
+.auth-page{padding:0 24px 24px}
+.auth-main{
+  display:flex;justify-content:center;align-items:flex-start;min-height:70vh;padding-top:40px
+}
+.auth-card{width:100%;max-width:420px}
+.auth-form{display:flex;flex-direction:column;gap:16px}
+.auth-error{
+  padding:10px 12px;background:#fee2e2;color:#991b1b;
+  border-radius:8px;font-size:13px
+}
+.auth-footer{
+  margin-top:16px;text-align:center;font-size:14px;color:#6b7c93
+}
+.auth-footer a{color:#2563eb;font-weight:600;text-decoration:none}
+.auth-footer a:hover{text-decoration:underline}
+@media(max-width:768px){
+  .auth-main{padding-top:24px;min-height:auto}
+}
 @media(max-width:768px){
   .header-actions{flex-direction:column;align-items:stretch}
   .search-input,.filter-select{width:100%}
