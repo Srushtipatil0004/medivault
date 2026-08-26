@@ -24,19 +24,17 @@ function App() {
       <main className="main-content">
         {!isAuthPage && <Header />}
         <Routes>
-          <Route path="/">
-            <Route index element={<Dashboard />} />
-            <Route path="medical-records" element={<MedicalRecords />} />
-            <Route path="medicines" element={<Medicines />} />
-            <Route path="appointments" element={<Appointments />} />
-            <Route path="diet" element={<Diet />} />
-            <Route path="ai-assistant" element={<AIAssistant />} />
-            <Route path="health-monitoring" element={<HealthMonitoring />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="login" element={<Login />} />
-            <Route path="register" element={<Register />} />
-          </Route>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/medical-records" element={<MedicalRecords />} />
+          <Route path="/medicines" element={<Medicines />} />
+          <Route path="/appointments" element={<Appointments />} />
+          <Route path="/diet" element={<Diet />} />
+          <Route path="/ai-assistant" element={<AIAssistant />} />
+          <Route path="/health-monitoring" element={<HealthMonitoring />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
         </Routes>
       </main>
     </div>
