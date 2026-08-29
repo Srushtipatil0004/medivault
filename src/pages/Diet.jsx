@@ -1,70 +1,134 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import {
+  Utensils,
+  Plus,
+  Trash2,
+  X,
+  Search,
+  Calendar,
+  Clock,
+} from "lucide-react";
+import { fetchDiet, addDiet, deleteDiet } from "../services/diet";
+import { ConfirmModal } from "../components/ConfirmModal";
 
-const meals = [
-  {
-    title: "Breakfast",
-    time: "08:00 AM",
-    icon: "🥣",
-    items: ["Oats", "Banana", "Milk"],
-    calories: 350,
-    protein: 12,
-    carbs: 55,
-    status: "Healthy",
-  },
-  {
-    title: "Lunch",
-    time: "01:00 PM",
-    icon: "🍛",
-    items: ["Rice", "Dal", "Salad"],
-    calories: 550,
-    protein: 20,
-    carbs: 80,
-    status: "Healthy",
-  },
-  {
-    title: "Snacks",
-    time: "04:30 PM",
-    icon: "🥜",
-    items: ["Almonds", "Green Tea"],
-    calories: 180,
-    protein: 5,
-    carbs: 15,
-    status: "Healthy",
-  },
-  {
-    title: "Dinner",
-    time: "08:00 PM",
-    icon: "🍽️",
-    items: ["Chapati", "Vegetable Curry", "Curd"],
-    calories: 420,
-    protein: 15,
-    carbs: 60,
-    status: "Healthy",
-  },
-];
-
-const nutritionSummary = {
-  caloriesConsumed: 1500,
-  caloriesGoal: 2200,
-  protein: 52,
-  proteinGoal: 70,
-  waterIntake: 1.8,
-  waterGoal: 3.0,
-};
+const mealTypes = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
 function Diet() {
+  const { user, loading: authLoading } = useAuth();
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalError, setModalError] = useState("");
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [form, setForm] = useState({
+    mealType: "Breakfast",
+    foodName: "",
+    date: "",
+    time: "",
+    notes: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
 
-  const filters = ["All", "Breakfast", "Lunch", "Snacks", "Dinner"];
+  const filters = ["All", ...mealTypes];
+
+  // fetch diet entries when user is ready
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setEntries([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const unsubscribe = fetchDiet(
+      user.uid,
+      (data) => {
+        setEntries(data);
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message || "Failed to load diet entries");
+        setLoading(false);
+      }
+    );
+    return unsubscribe;
+  }, [user, authLoading]);
+
+  const handleAddEntry = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    const missing = [];
+    if (!form.mealType) missing.push("Meal Type");
+    if (!form.foodName.trim()) missing.push("Food / Meal Name");
+    if (!form.date) missing.push("Date");
+    if (!form.time) missing.push("Time");
+    if (missing.length) {
+      setModalError(`Missing required fields: ${missing.join(", ")}`);
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    setModalError("");
+    try {
+      await addDiet(user.uid, form);
+      setModalOpen(false);
+      setForm({
+        mealType: "Breakfast",
+        foodName: "",
+        date: "",
+        time: "",
+        notes: "",
+      });
+    } catch (err) {
+      const msg = err.message || "Failed to add diet entry";
+      setError(msg);
+      setModalError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = (entry) => {
+    setEntryToDelete(entry);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!entryToDelete) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteDiet(user.uid, entryToDelete.id);
+      setDeleteModalOpen(false);
+      setEntryToDelete(null);
+    } catch (err) {
+      setError(err.message || "Failed to delete diet entry");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const filteredEntries = entries
+    .filter((e) => {
+      if (filter !== "All" && e.mealType !== filter) return false;
+      if (search && !e.foodName.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
     <div className="page-container">
       {/* Page Header */}
       <header className="page-header">
         <div className="header-text">
-          <h1>Diet & Nutrition</h1>
-          <p className="subtitle">Track your daily meals and maintain a healthy lifestyle</p>
+          <h1>Diet Tracker</h1>
+          <p className="subtitle">Log your meals and nutrition</p>
         </div>
         <div className="header-actions">
           <input
@@ -79,65 +143,129 @@ function Diet() {
               <option key={f} value={f}>{f}</option>
             ))}
           </select>
-          <button className="primary-button">+ Add Meal</button>
+          <button className="primary-button" onClick={() => { setModalError(""); setSubmitting(false); setModalOpen(true); }}>
+            <Plus className="icon" /> Add Meal
+          </button>
         </div>
       </header>
 
-      <section className="diet-layout">
-        {/* Meal Cards */}
-        <div className="meals-grid">
-          {meals.map((meal, idx) => (
-            <article key={idx} className="glass-card meal-card">
+      {error && <div className="auth-error" style={{margin:'16px 0'}}>{error}</div>}
+
+      {/* Diet Entries Grid */}
+      <section className="records-grid">
+        {loading ? (
+          <p style={{gridColumn:'1/-1',textAlign:'center',color:'#6b7c93'}}>Loading meals…</p>
+        ) : filteredEntries.length === 0 ? (
+          <p style={{gridColumn:'1/-1',textAlign:'center',color:'#6b7c93'}}>No meals logged. Click “Add Meal” to create one.</p>
+        ) : (
+          filteredEntries.map((entry) => (
+            <article key={entry.id} className="glass-card record-card">
               <div className="card-heading">
                 <div className="record-title-row">
-                  <span className="record-icon">{meal.icon}</span>
-                  <h2>{meal.title}</h2>
+                  <span className="record-icon"><Utensils className="icon" /></span>
+                  <h2>{entry.foodName}</h2>
                 </div>
               </div>
 
               <div className="record-meta">
-                <p><strong>Time:</strong> {meal.time}</p>
-                <p><strong>Items:</strong> {meal.items.join(", ")}</p>
-                <p><strong>Calories:</strong> {meal.calories} kcal</p>
-                <p><strong>Protein:</strong> {meal.protein} g</p>
-                <p><strong>Carbs:</strong> {meal.carbs} g</p>
-                <p>
-                  <strong>Status:</strong>
-                  <span className={`status-badge ${meal.status.toLowerCase()}`}>{meal.status}</span>
-                </p>
+                <p><strong>Meal:</strong> {entry.mealType}</p>
+                <p><strong>Date:</strong> {(d => { const dt = new Date(d); return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('en-GB'); })(entry.date)}</p>
+                <p><strong>Time:</strong> {entry.time}</p>
+                {entry.notes && <p><strong>Notes:</strong> {entry.notes}</p>}
               </div>
 
               <div className="record-actions">
-                <button className="primary-button">View Details</button>
+                <button className="secondary-button delete-button" onClick={() => handleDelete(entry)}>
+                  <Trash2 className="icon" /> Delete
+                </button>
               </div>
             </article>
-          ))}
-        </div>
-
-        {/* Nutrition Summary Card */}
-        <aside className="nutrition-card glass-card">
-          <div className="card-heading">
-            <h2>Nutrition Summary</h2>
-          </div>
-          <div className="nutrition-meta">
-            <div className="nutrient">
-              <div className="nutrient-label">Calories Consumed</div>
-              <div className="nutrient-value">{nutritionSummary.caloriesConsumed} / {nutritionSummary.caloriesGoal} kcal</div>
-              <div className="progress-bar"><div className="progress-fill" style={{width: `${Math.round(nutritionSummary.caloriesConsumed/nutritionSummary.caloriesGoal*100)}%`}}></div></div>
-            </div>
-            <div className="nutrient">
-              <div className="nutrient-label">Protein</div>
-              <div className="nutrient-value">{nutritionSummary.protein} / {nutritionSummary.proteinGoal} g</div>
-              <div className="progress-bar"><div className="progress-fill" style={{width: `${Math.round(nutritionSummary.protein/nutritionSummary.proteinGoal*100)}%`}}></div></div>
-            </div>
-            <div className="nutrient">
-              <div className="nutrient-label">Water Intake</div>
-              <div className="nutrient-value">{nutritionSummary.waterIntake} / {nutritionSummary.waterGoal} L</div>
-              <div className="progress-bar"><div className="progress-fill" style={{width: `${Math.round(nutritionSummary.waterIntake/nutritionSummary.waterGoal*100)}%`}}></div></div>
-            </div>
-          </div>
-        </aside>
+          ))
+        )}
       </section>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        open={deleteModalOpen}
+        title="Delete Diet Entry?"
+        message={entryToDelete ? `Are you sure you want to delete ${entryToDelete.foodName}?` : ''}
+        onCancel={() => { setDeleteModalOpen(false); setEntryToDelete(null); }}
+        onConfirm={confirmDelete}
+        loading={deleting}
+      />
+
+      {/* Add Meal Modal */}
+      {modalOpen && (
+        <div className="modal-overlay" onClick={() => setModalOpen(false)}>
+          <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Meal</h2>
+              <button className="icon-button" onClick={() => setModalOpen(false)}><X className="icon" /></button>
+            </div>
+            <form onSubmit={handleAddEntry} className="auth-form" noValidate style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+              <div className="form-field">
+                <label htmlFor="mealType">Meal Type</label>
+                <select
+                  id="mealType"
+                  className="filter-select"
+                  value={form.mealType}
+                  onChange={(e) => setForm({...form, mealType:e.target.value})}
+                >
+                  {mealTypes.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div className="form-field">
+                <label htmlFor="foodName">Food / Meal Name</label>
+                <input
+                  id="foodName"
+                  type="text"
+                  placeholder="e.g. Grilled Chicken Salad"
+                  value={form.foodName}
+                  onChange={(e) => setForm({...form, foodName:e.target.value})}
+                  required
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="date">Date</label>
+                <input
+                  id="date"
+                  type="date"
+                  value={form.date}
+                  onChange={(e) => setForm({...form, date:e.target.value})}
+                  required
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="time">Time</label>
+                <input
+                  id="time"
+                  type="time"
+                  value={form.time}
+                  onChange={(e) => setForm({...form, time:e.target.value})}
+                  required
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="notes">Notes (optional)</label>
+                <textarea
+                  id="notes"
+                  rows={3}
+                  placeholder="Any additional details..."
+                  value={form.notes}
+                  onChange={(e) => setForm({...form, notes:e.target.value})}
+                />
+              </div>
+              {modalError && <div className="auth-error" style={{marginBottom:'12px'}}>{modalError}</div>}
+              <div className="modal-actions">
+                <button type="submit" className="primary-button" disabled={submitting}>
+                  {submitting ? "Saving…" : "Save Meal"}
+                </button>
+                <button type="button" className="secondary-button cancel-button" onClick={() => setModalOpen(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
