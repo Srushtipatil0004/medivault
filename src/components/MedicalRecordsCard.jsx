@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { TestTube, FileText, Scan } from "lucide-react";
 
 function MedicalRecordsCard() {
   const navigate = useNavigate();
@@ -11,9 +12,9 @@ function MedicalRecordsCard() {
         </div>
       </div>
 
-      <p>🧪 Blood Test Report</p>
-      <p>📄 Doctor Prescription</p>
-      <p>🩻 Chest X-Ray</p>
+      <p><TestTube className="icon" /> Blood Test Report</p>
+      <p><FileText className="icon" /> Doctor Prescription</p>
+      <p><Scan className="icon" /> Chest X-Ray</p>
 
       <button className="primary-button" onClick={() => navigate("/medical-records")}>View All Records</button>
     </div>

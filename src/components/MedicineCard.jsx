@@ -1,3 +1,5 @@
+import { Pill } from "lucide-react";
+
 function MedicineCard() {
   return (
     <div className="glass-card">
@@ -8,7 +10,7 @@ function MedicineCard() {
         </div>
       </div>
 
-      <p>💊 Daily Medicine</p>
+      <p><Pill className="icon" /> Daily Medicine</p>
       <p>1 tablet • 08:00 AM</p>
 
       <button className="primary-button">Take Medicine</button>

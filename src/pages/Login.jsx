@@ -18,15 +18,7 @@ function Login() {
       await signInWithEmailAndPassword(auth, email, password);
       navigate("/");
     } catch (err) {
-      // Friendly error messages
-      const msg = err.message;
-      if (msg.includes("user-not-found") || msg.includes("wrong-password") || msg.includes("invalid-credential")) {
-        setError("Invalid email or password.");
-      } else if (msg.includes("invalid-email")) {
-        setError("Please enter a valid email address.");
-      } else {
-        setError("Login failed. Please try again.");
-      }
+      setError(`[${err.code}] ${err.message}`);
     } finally {
       setLoading(false);
     }

@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Existing rules for medicalRecords, medicines, appointments, diet, healthReadings
+    // (managed in Firebase Console - merge the new rule below with your existing rules)
+
+    // NEW: userPreferences - user-scoped access
+    match /userPreferences/{uid} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == uid;
+    }
+  }
+}

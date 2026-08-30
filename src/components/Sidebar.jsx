@@ -1,10 +1,21 @@
 import { NavLink } from "react-router-dom";
+import {
+  Cross,
+  Home,
+  FileText,
+  Pill,
+  Calendar,
+  UtensilsCrossed,
+  Bot,
+  Heart,
+  Settings,
+} from "lucide-react";
 
 function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-icon">✚</div>
+        <div className="brand-icon"><Cross className="icon" /></div>
         <div>
           <h2>MediVault</h2>
           <span>Smart Health Manager</span>
@@ -16,49 +27,49 @@ function Sidebar() {
           to="/"
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
-          <span>⌂</span> Dashboard
+          <Home className="icon" /> Dashboard
         </NavLink>
 
         <NavLink
           to="/medical-records"
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
-          <span>▣</span> Medical Records
+          <FileText className="icon" /> Medical Records
         </NavLink>
 
         <NavLink
           to="/medicines"
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
-          <span>💊</span> Medicines
+          <Pill className="icon" /> Medicines
         </NavLink>
 
         <NavLink
           to="/appointments"
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
-          <span>📅</span> Appointments
+          <Calendar className="icon" /> Appointments
         </NavLink>
 
         <NavLink
           to="/diet"
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
-          <span>🥗</span> Diet
+          <UtensilsCrossed className="icon" /> Diet
         </NavLink>
 
         <NavLink
           to="/ai-assistant"
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
-          <span>🤖</span> AI Assistant
+          <Bot className="icon" /> AI Assistant
         </NavLink>
 
         <NavLink
           to="/health-monitoring"
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
-          <span>❤️</span> Health Monitoring
+          <Heart className="icon" /> Health Monitoring
         </NavLink>
       </nav>
 
@@ -67,7 +78,7 @@ function Sidebar() {
           to="/settings"
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
-          <span>⚙️</span> Settings
+          <Settings className="icon" /> Settings
         </NavLink>
 
         <NavLink

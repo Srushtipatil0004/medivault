@@ -5,8 +5,9 @@ import {
   Plus,
   Trash2,
   X,
+  Edit,
 } from "lucide-react";
-import { fetchMedicines, addMedicine, deleteMedicine, takeDose } from "../services/medicines";
+import { fetchMedicines, addMedicine, deleteMedicine, takeDose, updateMedicine } from "../services/medicines";
 import { fetchPreferences, updatePreference } from "../services/preferences";
 import { app } from "../firebase";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -57,6 +58,7 @@ function Medicines() {
     frequency: "Once",
     timingType: "after_breakfast",
     exactTime: "",
+    doseTimes: ["", "", ""],
     reminderEnabled: true,
     reminderLeadMinutes: 60,
     doctorInstruction: "",
@@ -73,6 +75,7 @@ function Medicines() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [medicineToDelete, setMedicineToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [editMedicine, setEditMedicine] = useState(null);
 
   const frequencies = ["Once", "Twice", "Thrice"];
 
@@ -123,6 +126,17 @@ function Medicines() {
     }
   }, [form.timingType, mealPrefs]);
 
+  // adjust doseTimes length when frequency changes
+  useEffect(() => {
+    const count = frequencies.indexOf(form.frequency) + 1; // Once=1, Twice=2, Thrice=3
+    setForm(prev => {
+      const current = prev.doseTimes || ["", "", ""];
+      const next = current.slice(0, count);
+      while (next.length < count) next.push("");
+      return { ...prev, doseTimes: next };
+    });
+  }, [form.frequency]);
+
   const validateForm = () => {
     const missing = [];
     if (!form.name.trim()) missing.push("Medicine Name");
@@ -132,11 +146,29 @@ function Medicines() {
     if (!form.startDate) missing.push("Start Date");
     if (!form.totalTablets) missing.push("Total Tablets");
     if (!form.tabletsPerDose) missing.push("Tablets Per Dose");
-    if (form.exactTime) {
-      const parts = form.exactTime.split(":");
-      if (parts.length !== 2) return "Invalid exact time format";
-      const h = parseInt(parts[0],10), m = parseInt(parts[1],10);
-      if (isNaN(h) || h<0 || h>23 || isNaN(m) || m<0 || m>59) return "Exact time must be HH:MM (00-23, 00-59)";
+    const freqCount = frequencies.indexOf(form.frequency) + 1;
+    if (freqCount === 1) {
+      // Once: validate exactTime if provided
+      if (form.exactTime) {
+        const parts = form.exactTime.split(":");
+        if (parts.length !== 2) return "Invalid exact time format";
+        const h = parseInt(parts[0],10), m = parseInt(parts[1],10);
+        if (isNaN(h) || h<0 || h>23 || isNaN(m) || m<0 || m>59) return "Exact time must be HH:MM (00-23, 00-59)";
+      }
+    } else {
+      // Twice/Thrice: validate each doseTime
+      const times = form.doseTimes || [];
+      for (let i = 0; i < freqCount; i++) {
+        const t = times[i] || "";
+        if (!t) return `Missing dose time ${i+1}`;
+        const parts = t.split(":");
+        if (parts.length !== 2) return `Invalid dose time ${i+1} format`;
+        const h = parseInt(parts[0],10), m = parseInt(parts[1],10);
+        if (isNaN(h) || h<0 || h>23 || isNaN(m) || m<0 || m>59) return `Dose time ${i+1} must be HH:MM (00-23, 00-59)`;
+      }
+      // prevent duplicate times
+      const uniq = new Set(times.slice(0, freqCount));
+      if (uniq.size !== freqCount) return "Dose times must be unique";
     }
     return missing.length ? `Missing required fields: ${missing.join(", ")}` : null;
   };
@@ -151,24 +183,41 @@ function Medicines() {
     }
     // Diagnostics
     console.log("[AI] Medicine save: starting", { uid: user.uid, projectId: app.options.projectId });
-    // Determine scheduled time for the medicine
-    let scheduledTime = form.exactTime;
-    if (!scheduledTime) {
-      const meal = getMealFromTiming(form.timingType);
-      if (meal) {
-        scheduledTime = mealTimeValue || DEFAULT_MEAL_REFERENCE[form.timingType] || "08:00";
-      } else {
-        scheduledTime = DEFAULT_MEAL_REFERENCE[form.timingType] || "08:00";
+    // Build times array based on frequency
+    const freqCount = frequencies.indexOf(form.frequency) + 1;
+    let timesArray = [];
+    if (freqCount === 1) {
+      // Once: use exactTime or meal-derived time
+      let scheduledTime = form.exactTime;
+      if (!scheduledTime) {
+        const meal = getMealFromTiming(form.timingType);
+        if (meal) {
+          scheduledTime = mealTimeValue || DEFAULT_MEAL_REFERENCE[form.timingType] || "08:00";
+        } else {
+          scheduledTime = DEFAULT_MEAL_REFERENCE[form.timingType] || "08:00";
+        }
       }
+      timesArray = [scheduledTime];
+    } else {
+      // Twice/Thrice: use doseTimes inputs
+      timesArray = (form.doseTimes || []).slice(0, freqCount).filter(t => t);
+      // sort chronologically
+      timesArray.sort();
     }
-    const dataToSave = { ...form, times: [scheduledTime] };
+    const dataToSave = { ...form, times: timesArray };
     setSubmitting(true);
     setError("");
     setModalError("");
     try {
       console.log("[AI] Medicine save: medicine write starting");
-      const medicineId = await addMedicine(user.uid, dataToSave);
-      console.log("[AI] Medicine save: medicine write succeeded", { medicineId });
+      if (editMedicine) {
+        // Update existing medicine, preserve tracking fields
+        await updateMedicine(user.uid, editMedicine.id, dataToSave);
+        console.log("[AI] Medicine save: medicine update succeeded", { medicineId: editMedicine.id });
+      } else {
+        const medicineId = await addMedicine(user.uid, dataToSave);
+        console.log("[AI] Medicine save: medicine write succeeded", { medicineId });
+      }
 
       // Attempt to persist meal-time preference (non-blocking)
       const meal = getMealFromTiming(form.timingType);
@@ -192,6 +241,7 @@ function Medicines() {
         frequency: "Once",
         timingType: "after_breakfast",
         exactTime: "",
+        doseTimes: ["", "", ""],
         reminderEnabled: true,
         reminderLeadMinutes: 60,
         doctorInstruction: "",
@@ -203,6 +253,7 @@ function Medicines() {
       });
       setMealTimeValue("");
       setRememberMealTime(true);
+      setEditMedicine(null);
     } catch (err) {
       console.log("[AI] Medicine save error:", err.code, err.message);
       const msg = err.message || "Failed to add medicine";
@@ -231,6 +282,41 @@ function Medicines() {
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleEdit = (medicine) => {
+    // prefill form with medicine data
+    const meal = getMealFromTiming(medicine.timingType);
+    const existingTimes = medicine.times || [];
+    const freqCount = frequencies.indexOf(medicine.frequency) + 1;
+    const doseTimes = ["", "", ""];
+    existingTimes.slice(0, freqCount).forEach((t, i) => { doseTimes[i] = t; });
+    setForm({
+      name: medicine.name,
+      dosage: medicine.dosage,
+      frequency: medicine.frequency,
+      timingType: medicine.timingType,
+      exactTime: freqCount === 1 ? (medicine.exactTime || existingTimes[0] || "") : "",
+      doseTimes,
+      reminderEnabled: medicine.reminderEnabled,
+      reminderLeadMinutes: medicine.reminderLeadMinutes,
+      doctorInstruction: medicine.doctorInstruction || "",
+      startDate: medicine.startDate || "",
+      endDate: medicine.endDate || "",
+      notes: medicine.notes || "",
+      totalTablets: medicine.totalTablets,
+      tabletsPerDose: medicine.tabletsPerDose,
+    });
+    if (meal && freqCount === 1) {
+      setMealTimeValue(existingTimes[0] || "");
+      setRememberMealTime(false);
+    } else {
+      setMealTimeValue("");
+      setRememberMealTime(true);
+    }
+    setEditMedicine(medicine);
+    setModalOpen(true);
+    setModalError("");
   };
 
   const handleTakeDose = async (medicine) => {
@@ -348,6 +434,9 @@ function Medicines() {
                     >
                       Take Dose
                     </button>
+                    <button className="secondary-button edit-button" style={{flex:1}} onClick={() => handleEdit(med)}>
+                      <Edit className="icon" /> Edit
+                    </button>
                     <button className="secondary-button delete-button" style={{flex:1}} onClick={() => handleDelete(med)}>
                       <Trash2 className="icon" /> Delete
                     </button>
@@ -368,13 +457,13 @@ function Medicines() {
         loading={deleting}
       />
 
-      {/* Add Medicine Modal */}
+      {/* Add/Edit Medicine Modal */}
       {modalOpen && (
-        <div className="modal-overlay" onClick={() => setModalOpen(false)}>
+        <div className="modal-overlay" onClick={() => { setModalOpen(false); setEditMedicine(null); }}>
           <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Add Medicine</h2>
-              <button className="icon-button" onClick={() => setModalOpen(false)}><X className="icon" /></button>
+              <h2>{editMedicine ? "Edit Medicine" : "Add Medicine"}</h2>
+              <button className="icon-button" onClick={() => { setModalOpen(false); setEditMedicine(null); }}><X className="icon" /></button>
             </div>
             <form onSubmit={handleAddMedicine} className="auth-form" noValidate style={{display:'flex',flexDirection:'column',gap:'12px'}}>
               <div className="form-field">
@@ -421,44 +510,78 @@ function Medicines() {
                   {TIMING_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
-              <div className="form-field">
-                <label htmlFor="exactTime">Exact time (optional)</label>
-                <input
-                  id="exactTime"
-                  type="time"
-                  value={form.exactTime}
-                  onChange={(e) => setForm({...form, exactTime:e.target.value})}
-                />
-              </div>
+              {/* Exact time / dose times */}
               {(() => {
-                const meal = getMealFromTiming(form.timingType);
-                if (!meal) return null;
-                const label = `Usual ${meal.charAt(0).toUpperCase() + meal.slice(1)} time`;
-                const placeholder = `Enter your usual ${meal} time`;
-                const saved = mealPrefs[`usual${meal.charAt(0).toUpperCase() + meal.slice(1)}Time`];
-                return (
-                  <div className="form-field">
-                    <label htmlFor="mealTime">{label}</label>
-                    <input
-                      id="mealTime"
-                      type="time"
-                      value={mealTimeValue}
-                      onChange={(e) => setMealTimeValue(e.target.value)}
-                      placeholder={placeholder}
-                    />
-                    <div style={{display:"inline-flex",alignItems:"center",gap:"8px",marginTop:"4px",alignSelf:"flex-start"}}>
-                      <input
-                        type="checkbox"
-                        id="rememberMealTime"
-                        checked={rememberMealTime}
-                        onChange={(e) => setRememberMealTime(e.target.checked)}
-                      />
-                      <label htmlFor="rememberMealTime" style={{fontSize:"0.85rem",cursor:"pointer",whiteSpace:"nowrap"}}>
-                        Remember for next time
-                      </label>
+                const freqCount = frequencies.indexOf(form.frequency) + 1;
+                if (freqCount === 1) {
+                  return (
+                    <>
+                      <div className="form-field">
+                        <label htmlFor="exactTime">Exact time (optional)</label>
+                        <input
+                          id="exactTime"
+                          type="time"
+                          value={form.exactTime}
+                          onChange={(e) => setForm({...form, exactTime:e.target.value})}
+                        />
+                      </div>
+                      {(() => {
+                        const meal = getMealFromTiming(form.timingType);
+                        if (!meal) return null;
+                        const label = `Usual ${meal.charAt(0).toUpperCase() + meal.slice(1)} time`;
+                        const placeholder = `Enter your usual ${meal} time`;
+                        const saved = mealPrefs[`usual${meal.charAt(0).toUpperCase() + meal.slice(1)}Time`];
+                        return (
+                          <div className="form-field">
+                            <label htmlFor="mealTime">{label}</label>
+                            <input
+                              id="mealTime"
+                              type="time"
+                              value={mealTimeValue}
+                              onChange={(e) => setMealTimeValue(e.target.value)}
+                              placeholder={placeholder}
+                            />
+                            <div style={{display:"inline-flex",alignItems:"center",gap:"8px",marginTop:"4px",alignSelf:"flex-start"}}>
+                              <input
+                                type="checkbox"
+                                id="rememberMealTime"
+                                checked={rememberMealTime}
+                                onChange={(e) => setRememberMealTime(e.target.checked)}
+                              />
+                              <label htmlFor="rememberMealTime" style={{fontSize:"0.85rem",cursor:"pointer",whiteSpace:"nowrap"}}>
+                                Remember for next time
+                              </label>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </>
+                  );
+                } else {
+                  // Multiple dose times
+                  return (
+                    <div className="form-field">
+                      <label>Dose times</label>
+                      <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                        {Array.from({length: freqCount}).map((_, i) => (
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                            <span style={{minWidth:'80px'}}>Dose {i+1}</span>
+                            <input
+                              type="time"
+                              value={form.doseTimes[i] || ""}
+                              onChange={(e) => {
+                                const next = [...form.doseTimes];
+                                next[i] = e.target.value;
+                                setForm({...form, doseTimes: next});
+                              }}
+                              required
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                );
+                  );
+                }
               })()}
               <div className="form-field">
                 <label htmlFor="doctorInstruction">Doctor's instruction (if Other)</label>
@@ -549,9 +672,9 @@ function Medicines() {
               {modalError && <div className="auth-error" style={{marginBottom:'12px'}}>{modalError}</div>}
               <div className="modal-actions">
                 <button type="submit" className="primary-button" disabled={submitting}>
-                  {submitting ? "Saving…" : "Save Medicine"}
+                  {submitting ? "Saving…" : (editMedicine ? "Save Changes" : "Save Medicine")}
                 </button>
-                <button type="button" className="secondary-button cancel-button" onClick={() => { setMealTimeValue(""); setRememberMealTime(true); setModalOpen(false); }}>Cancel</button>
+                <button type="button" className="secondary-button cancel-button" onClick={() => { setMealTimeValue(""); setRememberMealTime(true); setModalOpen(false); setEditMedicine(null); }}>Cancel</button>
               </div>
             </form>
           </div>
